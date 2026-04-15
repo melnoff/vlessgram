@@ -1,0 +1,17 @@
+# Path to your Android SDK
+sdk.dir=/path/to/android-sdk
+
+# Telegram API credentials
+# Register your own application at https://my.telegram.org/apps
+# Without these, the build will fail or the app won't authenticate
+TELEGRAM_API_ID=12345
+TELEGRAM_API_HASH=abcdef1234567890abcdef1234567890
+
+# Signing keystore — generate your own:
+#   keytool -genkeypair -v -keystore TMessagesProj/config/vlessgram.keystore \
+#     -alias vlessgram -keyalg RSA -keysize 2048 -validity 36500 \
+#     -storepass YOUR_PASSWORD -keypass YOUR_PASSWORD \
+#     -dname "CN=Your Name, O=example.com, C=US"
+VLESSGRAM_KEYSTORE_PASSWORD=your_keystore_password
+VLESSGRAM_KEY_ALIAS=vlessgram
+VLESSGRAM_KEY_PASSWORD=your_keystore_password

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "890049365711",
+    "project_id": "vlessgram-692db",
+    "storage_bucket": "vlessgram-692db.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:890049365711:android:f15456b7b92be24f0799ba",
+        "android_client_info": {
+          "package_name": "com.melnoff.vlessgram"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC1RPZFSlY6bQDs8Zvu2C9Ep5PJtGedZUk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

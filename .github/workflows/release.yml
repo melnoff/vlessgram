@@ -1,0 +1,132 @@
+name: Build and Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_name:
+        description: 'Release name (e.g. v1.0.0)'
+        required: true
+        default: 'v0.0.0-manual'
+
+permissions:
+  contents: write
+
+env:
+  JAVA_VERSION: '17'
+  ANDROID_API_LEVEL: 35
+  ANDROID_BUILD_TOOLS: '35.0.0'
+  ANDROID_NDK_VERSION: '21.4.7075529'
+  ANDROID_CMAKE_VERSION: '3.10.2.4988404'
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK components
+        run: |
+          yes | sdkmanager --licenses > /dev/null
+          sdkmanager "platforms;android-${{ env.ANDROID_API_LEVEL }}" \
+                     "build-tools;${{ env.ANDROID_BUILD_TOOLS }}" \
+                     "ndk;${{ env.ANDROID_NDK_VERSION }}" \
+                     "cmake;${{ env.ANDROID_CMAKE_VERSION }}"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Cache CXX native build
+        uses: actions/cache@v4
+        with:
+          path: |
+            TMessagesProj/.cxx
+            TMessagesProj/build/intermediates/cxx
+          key: cxx-${{ runner.os }}-${{ hashFiles('TMessagesProj/jni/**/*.cpp', 'TMessagesProj/jni/**/*.c', 'TMessagesProj/jni/**/CMakeLists.txt') }}
+          restore-keys: cxx-${{ runner.os }}-
+
+      - name: Download hiddify-core AAR
+        run: ./scripts/download-singbox.sh
+
+      - name: Decode signing keystore
+        run: |
+          echo "${{ secrets.VLESSGRAM_KEYSTORE_BASE64 }}" | base64 -d > TMessagesProj/config/vlessgram.keystore
+          ls -la TMessagesProj/config/vlessgram.keystore
+
+      - name: Decode google-services.json (app module)
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > TMessagesProj_App/google-services.json
+
+      - name: Write local.properties
+        run: |
+          cat > local.properties <<EOF
+          sdk.dir=$ANDROID_SDK_ROOT
+          TELEGRAM_API_ID=${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH=${{ secrets.TELEGRAM_API_HASH }}
+          VLESSGRAM_KEYSTORE_PASSWORD=${{ secrets.VLESSGRAM_KEYSTORE_PASSWORD }}
+          VLESSGRAM_KEY_ALIAS=${{ secrets.VLESSGRAM_KEY_ALIAS }}
+          VLESSGRAM_KEY_PASSWORD=${{ secrets.VLESSGRAM_KEY_PASSWORD }}
+          EOF
+
+      - name: Build release APK
+        run: ./gradlew :TMessagesProj_App:assembleAfatRelease --no-daemon --stacktrace
+
+      - name: Rename APK
+        id: rename
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          if [ -z "$TAG_NAME" ] || [ "$TAG_NAME" = "$GITHUB_REF" ]; then
+            TAG_NAME="${{ github.event.inputs.release_name }}"
+          fi
+          SRC="TMessagesProj_App/build/outputs/apk/afat/release/app.apk"
+          DST="vlessgram-${TAG_NAME}-arm64.apk"
+          cp "$SRC" "$DST"
+          echo "apk_path=$DST" >> $GITHUB_OUTPUT
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          ls -lh "$DST"
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vlessgram-apk
+          path: ${{ steps.rename.outputs.apk_path }}
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: VLessGram ${{ steps.rename.outputs.tag_name }}
+          tag_name: ${{ steps.rename.outputs.tag_name }}
+          files: ${{ steps.rename.outputs.apk_path }}
+          generate_release_notes: true
+          body: |
+            VLessGram ${{ steps.rename.outputs.tag_name }} — Telegram fork with embedded VLESS proxy.
+
+            **APK**: arm64-v8a only, signed release build (~72 MB).
+
+            SHA-256 fingerprint of signing certificate:
+            `16a249f527ac6c1318f513d18892aec74e7653f9e4c3b0b39afb795bcfabb29e`
+
+            See [README](README.md) and [NOTICE](NOTICE) for licenses and attribution.
